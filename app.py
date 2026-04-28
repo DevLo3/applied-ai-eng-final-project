@@ -1,8 +1,11 @@
+import os
+
 import streamlit as st
 
 from pawpal_system import BusyPeriod, Parent, Pet, PRIORITY_ORDER, Recurrence, Schedule, Scheduler, Task, TimePreference
+import rag
 
-st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
+st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered", initial_sidebar_state="collapsed")
 
 st.title("🐾 PawPal+")
 
@@ -21,6 +24,15 @@ if "tasks" not in st.session_state:
 
 if "schedule" not in st.session_state:
     st.session_state.schedule = None
+
+if "gemini_api_key" not in st.session_state:
+    st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+
+if "gemini_key_valid" not in st.session_state:
+    st.session_state.gemini_key_valid = None  # None = unchecked, True = valid, False = invalid
+
+if "gemini_key_error" not in st.session_state:
+    st.session_state.gemini_key_error = ""
 
 # ---------------------------------------------------------------------------
 # Section 1: Owner
@@ -267,3 +279,110 @@ if st.session_state.schedule:
     # ── Reasoning expander ────────────────────────────────────────────────────
     with st.expander("Scheduling reasoning"):
         st.text(schedule.generate_reasoning_text())
+
+st.divider()
+
+# ---------------------------------------------------------------------------
+# Section 5: Gemini API key
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.header("Gemini API Key")
+    key_input = st.text_input(
+        "Enter your Gemini API key",
+        value=st.session_state.gemini_api_key,
+        type="password",
+        help="Required for Pet Documents Q&A. Get a free key at aistudio.google.com.",
+    )
+    if key_input != st.session_state.gemini_api_key:
+        st.session_state.gemini_api_key = key_input
+        st.session_state.gemini_key_valid = None
+        st.session_state.gemini_key_error = ""
+        os.environ["GEMINI_API_KEY"] = key_input
+
+    if st.session_state.gemini_api_key:
+        os.environ["GEMINI_API_KEY"] = st.session_state.gemini_api_key.strip()
+        if st.button("Validate Key"):
+            with st.spinner("Checking…"):
+                try:
+                    rag.validate_key()
+                    st.session_state.gemini_key_valid = True
+                    st.session_state.gemini_key_error = ""
+                except Exception as exc:
+                    st.session_state.gemini_key_valid = False
+                    st.session_state.gemini_key_error = str(exc)
+
+    if st.session_state.gemini_key_valid is True:
+        st.success("API key is valid.")
+    elif st.session_state.gemini_key_valid is False:
+        st.error("Validation failed.")
+        if st.session_state.get("gemini_key_error"):
+            st.caption(st.session_state.gemini_key_error)
+    elif st.session_state.gemini_api_key:
+        st.info("Key entered — click Validate Key to confirm.")
+    else:
+        st.warning("No API key set. The Q&A features will be disabled.")
+
+# ---------------------------------------------------------------------------
+# Section 6: Pet Documents
+# ---------------------------------------------------------------------------
+
+st.subheader("Pet Documents")
+
+if not st.session_state.pets:
+    st.info("Add a pet above before uploading documents.")
+else:
+    pet_names_for_docs = [p.name for p in st.session_state.pets]
+    doc_pet = st.selectbox("Pet", pet_names_for_docs, key="doc_pet_select")
+
+    existing_sources = rag.list_sources(doc_pet)
+    if existing_sources:
+        st.caption("Already ingested: " + ", ".join(existing_sources))
+
+    uploaded_file = st.file_uploader(
+        "Upload a document (PDF, DOCX, TXT, or MD)",
+        type=["pdf", "docx", "txt", "md"],
+        key="doc_uploader",
+    )
+
+    if st.button("Ingest Document", disabled=uploaded_file is None):
+        if not st.session_state.gemini_api_key:
+            st.error("Enter your Gemini API key in the sidebar first.")
+        else:
+            with st.spinner(f"Embedding {uploaded_file.name}…"):
+                try:
+                    n = rag.ingest(doc_pet, uploaded_file.getvalue(), uploaded_file.name)
+                    st.success(f"Stored {n} chunks from **{uploaded_file.name}** for {doc_pet}.")
+                except Exception as exc:
+                    st.error(f"Ingestion failed: {exc}")
+
+st.divider()
+
+# ---------------------------------------------------------------------------
+# Section 7: Ask About a Pet
+# ---------------------------------------------------------------------------
+
+st.subheader("Ask About a Pet")
+
+if not st.session_state.pets:
+    st.info("Add a pet above to use the Q&A feature.")
+else:
+    qa_pet = st.selectbox("Pet", [p.name for p in st.session_state.pets], key="qa_pet_select")
+    question = st.text_input("Question", placeholder="When was the last rabies vaccination?")
+    use_general = st.checkbox(
+        "Supplement with Gemini's general knowledge if documents don't cover the answer",
+        value=False,
+    )
+
+    if st.button("Ask", disabled=not question.strip()):
+        if not st.session_state.gemini_api_key:
+            st.error("Enter your Gemini API key in the sidebar first.")
+        else:
+            with st.spinner("Searching documents and generating answer…"):
+                try:
+                    answer, sources = rag.query(qa_pet, question, general_knowledge=use_general)
+                    st.markdown(answer)
+                    if sources:
+                        st.caption("Sources: " + ", ".join(sources))
+                except Exception as exc:
+                    st.error(f"Query failed: {exc}")
