@@ -269,3 +269,39 @@ class TestConflictDetection:
         # The schedule object must expose the conflicts attribute.
         assert hasattr(schedule, "conflicts")
         assert isinstance(schedule.conflicts, list)
+
+
+# ---------------------------------------------------------------------------
+# 4. RAG reliability (no API key required — tests early-exit error handling)
+# ---------------------------------------------------------------------------
+
+class TestRAGReliability:
+    """Verify that the RAG pipeline degrades gracefully when no documents exist.
+
+    These tests never reach the Gemini API; they exercise the early-return paths
+    in rag.query and rag.list_sources.
+    """
+
+    _PET = "zzz-nonexistent-test-pet-99"  # guaranteed to have no ChromaDB collection
+
+    def test_query_returns_string_when_no_documents(self):
+        """rag.query returns a non-empty string (not an exception) for an unknown pet."""
+        import rag
+        answer, sources = rag.query(self._PET, "What vaccines has this pet had?")
+
+        assert isinstance(answer, str)
+        assert len(answer) > 0
+
+    def test_query_returns_empty_sources_when_no_documents(self):
+        """rag.query returns an empty source list when no documents are ingested."""
+        import rag
+        _, sources = rag.query(self._PET, "Any question")
+
+        assert sources == []
+
+    def test_list_sources_returns_empty_list_for_unknown_pet(self):
+        """rag.list_sources returns [] (not an exception) for a pet with no uploads."""
+        import rag
+        result = rag.list_sources(self._PET)
+
+        assert result == []

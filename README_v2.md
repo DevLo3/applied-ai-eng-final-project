@@ -172,3 +172,4 @@ Testing the scheduler in isolation — before wiring it to the UI — caught sev
 **On human-in-the-loop design** — The Q&A feature was built with deliberate friction: the user must explicitly enable general-knowledge supplementation, and sources are always shown. That design choice came from recognizing that a confident wrong answer about a pet's medication or diet is worse than no answer. Keeping the human in the loop — reading the source, deciding whether to trust the answer — is the right default for health-adjacent information.
 
 **On problem-solving** — Building incrementally (UML → class stubs → logic → tests → UI → RAG) and verifying at each layer kept the project manageable. The times I skipped verification and moved straight to the next layer were the times I introduced bugs that took much longer to track down than if I had caught them immediately.
+
