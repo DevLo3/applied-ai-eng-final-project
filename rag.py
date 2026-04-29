@@ -56,8 +56,16 @@ def _gemini_client():
 
 
 def _chroma_client() -> chromadb.PersistentClient:
+    import shutil
     CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(path=str(CHROMA_DIR))
+    try:
+        return chromadb.PersistentClient(path=str(CHROMA_DIR))
+    except Exception:
+        # Database is corrupt or incomplete (e.g. restored from partial git state).
+        # Wipe and reinitialize — documents will need to be re-uploaded.
+        shutil.rmtree(CHROMA_DIR)
+        CHROMA_DIR.mkdir(parents=True)
+        return chromadb.PersistentClient(path=str(CHROMA_DIR))
 
 
 def _collection_name(pet_name: str) -> str:

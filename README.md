@@ -1,5 +1,7 @@
 # PawPal Chat
 
+**Demo:** [Watch on Loom](https://www.loom.com/share/99901bf63d8d4a0796c7b012eae1ad96)
+
 A Streamlit app that combines rule-based pet-care scheduling with Gemini-powered document Q&A, so pet owners can plan their day *and* ask questions grounded in their pet's actual records.
 
 ---
